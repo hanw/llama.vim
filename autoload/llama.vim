@@ -44,31 +44,43 @@ highlight default llama_hl_info guifg=#77ff2f ctermfg=119
 "   keymap_accept_word: keymap to accept word suggestion, default: <C-B>
 "
 let s:default_config = {
-    \ 'endpoint':           'http://127.0.0.1:8012/infill',
-    \ 'api_key':            '',
-    \ 'n_prefix':           256,
-    \ 'n_suffix':           64,
-    \ 'n_predict':          128,
-    \ 'stop_strings':       [],
-    \ 't_max_prompt_ms':    500,
-    \ 't_max_predict_ms':   1000,
-    \ 'show_info':          2,
-    \ 'auto_fim':           v:true,
-    \ 'max_line_suffix':    8,
-    \ 'max_cache_keys':     250,
-    \ 'ring_n_chunks':      16,
-    \ 'ring_chunk_size':    64,
-    \ 'ring_scope':         1024,
-    \ 'ring_update_ms':     1000,
-    \ 'keymap_trigger':     "<C-F>",
+    \ 'provider':          'llama_cpp',
+    \ 'model':             '',
+    \ 'anthropic_version': '2023-06-01',
+    \ 'endpoint':          'http://127.0.0.1:8012/infill',
+    \ 'api_key':           '',
+    \ 'n_prefix':          256,
+    \ 'n_suffix':          64,
+    \ 'n_predict':         128,
+    \ 'stop_strings':      [],
+    \ 't_max_prompt_ms':   500,
+    \ 't_max_predict_ms':  1000,
+    \ 'show_info':         2,
+    \ 'auto_fim':          v:true,
+    \ 'max_line_suffix':   8,
+    \ 'max_cache_keys':    250,
+    \ 'ring_n_chunks':     16,
+    \ 'ring_chunk_size':   64,
+    \ 'ring_scope':        1024,
+    \ 'ring_update_ms':    1000,
+    \ 'keymap_trigger':    "<C-F>",
     \ 'keymap_accept_full': "<Tab>",
     \ 'keymap_accept_line': "<S-Tab>",
     \ 'keymap_accept_word': "<C-B>",
-    \ 'enable_at_startup':  v:true,
+    \ 'enable_at_startup': v:true,
     \ }
 
-let llama_config = get(g:, 'llama_config', s:default_config)
+let llama_config = get(g:, 'llama_config', {})
 let g:llama_config = extendnew(s:default_config, llama_config, 'force')
+
+if g:llama_config.provider ==# 'claude'
+    if empty(get(g:llama_config, 'endpoint', ''))
+        let g:llama_config.endpoint = 'https://api.anthropic.com/v1/messages'
+    endif
+    if empty(get(g:llama_config, 'api_key', ''))
+        throw 'llama.vim: g:llama_config.api_key is required for provider "claude"'
+    endif
+endif
 
 let s:llama_enabled = v:false
 
@@ -410,7 +422,12 @@ function! s:ring_update()
         \ "--data", "@-",
         \ ]
 
-    if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
+    if g:llama_config.provider ==# 'claude'
+        call extend(l:curl_command, [
+            \ '--header', 'x-api-key: ' .. g:llama_config.api_key,
+            \ '--header', 'anthropic-version: ' .. g:llama_config.anthropic_version,
+            \ ])
+    elseif !empty(g:llama_config.api_key)
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
     endif
 
@@ -662,7 +679,12 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
         \ "--data", "@-",
         \ ]
 
-    if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
+    if g:llama_config.provider ==# 'claude'
+        call extend(l:curl_command, [
+            \ '--header', 'x-api-key: ' .. g:llama_config.api_key,
+            \ '--header', 'anthropic-version: ' .. g:llama_config.anthropic_version,
+            \ ])
+    elseif !empty(g:llama_config.api_key)
         call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
     endif
 
