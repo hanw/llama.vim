@@ -622,48 +622,78 @@ function! llama#fim(pos_x, pos_y, is_auto, prev, use_cache) abort
             \ })
     endfor
 
-    let l:request = json_encode({
-        \ 'input_prefix':     l:prefix,
-        \ 'input_suffix':     l:suffix,
-        \ 'input_extra':      l:extra_ctx,
-        \ 'prompt':           l:middle,
-        \ 'n_predict':        g:llama_config.n_predict,
-        \ 'stop':             g:llama_config.stop_strings,
-        \ 'n_indent':         l:indent,
-        \ 'top_k':            40,
-        \ 'top_p':            0.90,
-        \ 'stream':           v:false,
-        \ 'samplers':         ["top_k", "top_p", "infill"],
-        \ 'cache_prompt':     v:true,
-        \ 't_max_prompt_ms':  g:llama_config.t_max_prompt_ms,
-        \ 't_max_predict_ms': l:t_max_predict_ms,
-        \ 'response_fields':  [
-        \                       "content",
-        \                       "timings/prompt_n",
-        \                       "timings/prompt_ms",
-        \                       "timings/prompt_per_token_ms",
-        \                       "timings/prompt_per_second",
-        \                       "timings/predicted_n",
-        \                       "timings/predicted_ms",
-        \                       "timings/predicted_per_token_ms",
-        \                       "timings/predicted_per_second",
-        \                       "truncated",
-        \                       "tokens_cached",
-        \                     ],
-        \ })
+    let l:provider = get(g:llama_config, 'provider', '')
 
-    let l:curl_command = [
-        \ "curl",
-        \ "--silent",
-        \ "--no-buffer",
-        \ "--request", "POST",
-        \ "--url", g:llama_config.endpoint,
-        \ "--header", "Content-Type: application/json",
-        \ "--data", "@-",
-        \ ]
+    if l:provider ==# 'claude'
+        let l:cursor_marker = get(g:llama_config, 'cursor_marker', '<|cursor|>')
+        let l:message = l:prefix .. l:middle .. l:cursor_marker .. l:suffix
 
-    if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
-        call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
+        let l:request = json_encode({
+            \ 'model':      g:llama_config.model,
+            \ 'max_tokens': g:llama_config.n_predict,
+            \ 'messages':   [
+            \                 {
+            \                     'role':    'user',
+            \                     'content': l:message,
+            \                 }
+            \               ],
+            \ })
+
+        let l:curl_command = [
+            \ 'curl',
+            \ '--silent',
+            \ '--no-buffer',
+            \ '--request', 'POST',
+            \ '--url', 'https://api.anthropic.com/v1/messages',
+            \ '--header', 'Content-Type: application/json',
+            \ '--header', 'x-api-key: ' .. g:llama_config.api_key,
+            \ '--header', 'anthropic-version: 2023-06-01',
+            \ '--data', '@-',
+            \ ]
+    else
+        let l:request = json_encode({
+            \ 'input_prefix':     l:prefix,
+            \ 'input_suffix':     l:suffix,
+            \ 'input_extra':      l:extra_ctx,
+            \ 'prompt':           l:middle,
+            \ 'n_predict':        g:llama_config.n_predict,
+            \ 'stop':             g:llama_config.stop_strings,
+            \ 'n_indent':         l:indent,
+            \ 'top_k':            40,
+            \ 'top_p':            0.90,
+            \ 'stream':           v:false,
+            \ 'samplers':         ["top_k", "top_p", "infill"],
+            \ 'cache_prompt':     v:true,
+            \ 't_max_prompt_ms':  g:llama_config.t_max_prompt_ms,
+            \ 't_max_predict_ms': l:t_max_predict_ms,
+            \ 'response_fields':  [
+            \                       "content",
+            \                       "timings/prompt_n",
+            \                       "timings/prompt_ms",
+            \                       "timings/prompt_per_token_ms",
+            \                       "timings/prompt_per_second",
+            \                       "timings/predicted_n",
+            \                       "timings/predicted_ms",
+            \                       "timings/predicted_per_token_ms",
+            \                       "timings/predicted_per_second",
+            \                       "truncated",
+            \                       "tokens_cached",
+            \                     ],
+            \ })
+
+        let l:curl_command = [
+            \ "curl",
+            \ "--silent",
+            \ "--no-buffer",
+            \ "--request", "POST",
+            \ "--url", g:llama_config.endpoint,
+            \ "--header", "Content-Type: application/json",
+            \ "--data", "@-",
+            \ ]
+
+        if exists ("g:llama_config.api_key") && len("g:llama_config.api_key") > 0
+            call extend(l:curl_command, ['--header', 'Authorization: Bearer ' .. g:llama_config.api_key])
+        endif
     endif
 
     if s:current_job != v:null
