@@ -114,6 +114,12 @@ Either build from source or use the latest binaries: https://github.com/ggml-org
 
 Here are recommended settings, depending on the amount of VRAM that you have:
 
+- More than 64GB VRAM:
+
+  ```bash
+  llama-server --fim-qwen-30b-default
+  ```
+
 - More than 16GB VRAM:
 
   ```bash
