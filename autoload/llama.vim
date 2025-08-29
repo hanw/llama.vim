@@ -727,7 +727,7 @@ function! s:fim_on_response(hashes, job_id, data, event = v:null)
     endif
 
     " ensure the response is valid JSON, starting with a fast check before full decode
-    if l:raw !~# '^\s*{' || l:raw !~# '\v"content"\s*:"'
+    if l:raw !~# '^\s*{' || l:raw !~# '\v"content"\s*:'
         return
     endif
     try
@@ -861,30 +861,53 @@ function! s:fim_render(pos_x, pos_y, data)
     " get the generated suggestion
     if l:can_accept
         let l:response = json_decode(l:raw)
+        let l:provider = get(g:llama_config, 'provider', '')
 
-        for l:part in split(get(l:response, 'content', ''), "\n", 1)
-            call add(l:content, l:part)
-        endfor
+        if l:provider ==# 'claude'
+            " Claude responses contain an array of content segments
+            let l:text = ''
+            for l:seg in get(l:response, 'content', [])
+                if type(l:seg) == v:t_dict
+                    let l:text .= get(l:seg, 'text', '')
+                endif
+            endfor
+
+            for l:part in split(l:text, "\n", 1)
+                call add(l:content, l:part)
+            endfor
+
+            let l:usage = get(l:response, 'usage', {})
+            let l:n_prompt  = get(l:usage, 'input_tokens', 0)
+            let l:n_predict = get(l:usage, 'output_tokens', 0)
+            let l:stop_reason = get(l:response, 'stop_reason', '')
+            let l:truncated = l:stop_reason ==# 'max_tokens'
+
+            let l:n_cached = 0
+        else
+            for l:part in split(get(l:response, 'content', ''), "\n", 1)
+                call add(l:content, l:part)
+            endfor
+
+            let l:n_cached  = get(l:response, 'tokens_cached', 0)
+            let l:truncated = get(l:response, 'timings/truncated', v:false)
+
+            " if response.timings is available
+            if has_key(l:response, 'timings/prompt_n') && has_key(l:response, 'timings/prompt_ms') && has_key(l:response, 'timings/prompt_per_second')
+                \ && has_key(l:response, 'timings/predicted_n') && has_key(l:response, 'timings/predicted_ms') && has_key(l:response, 'timings/predicted_per_second')
+                let l:n_prompt    = get(l:response, 'timings/prompt_n', 0)
+                let l:t_prompt_ms = get(l:response, 'timings/prompt_ms', 1)
+                let l:s_prompt    = get(l:response, 'timings/prompt_per_second', 0)
+
+                let l:n_predict    = get(l:response, 'timings/predicted_n', 0)
+                let l:t_predict_ms = get(l:response, 'timings/predicted_ms', 1)
+                let l:s_predict    = get(l:response, 'timings/predicted_per_second', 0)
+            endif
+        endif
 
         " remove trailing new lines
         while len(l:content) > 0 && l:content[-1] == ""
             call remove(l:content, -1)
         endwhile
-
-        let l:n_cached  = get(l:response, 'tokens_cached', 0)
-        let l:truncated = get(l:response, 'timings/truncated', v:false)
-
-        " if response.timings is available
-        if has_key(l:response, 'timings/prompt_n') && has_key(l:response, 'timings/prompt_ms') && has_key(l:response, 'timings/prompt_per_second')
-            \ && has_key(l:response, 'timings/predicted_n') && has_key(l:response, 'timings/predicted_ms') && has_key(l:response, 'timings/predicted_per_second')
-            let l:n_prompt    = get(l:response, 'timings/prompt_n', 0)
-            let l:t_prompt_ms = get(l:response, 'timings/prompt_ms', 1)
-            let l:s_prompt    = get(l:response, 'timings/prompt_per_second', 0)
-
-            let l:n_predict    = get(l:response, 'timings/predicted_n', 0)
-            let l:t_predict_ms = get(l:response, 'timings/predicted_ms', 1)
-            let l:s_predict    = get(l:response, 'timings/predicted_per_second', 0)
-        endif
 
         let l:has_info = v:true
     endif
